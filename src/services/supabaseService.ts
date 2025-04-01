@@ -2,32 +2,20 @@
 import { toast } from 'sonner';
 import { Category, GroceryItem } from '@/types/groceryTypes';
 import { v4 as uuidv4 } from 'uuid';
-
-// Mock data storage using localStorage
-const getLocalStorage = <T>(key: string): T[] => {
-  try {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-  } catch (error) {
-    console.error(`Error retrieving ${key} from localStorage:`, error);
-    return [];
-  }
-};
-
-const setLocalStorage = <T>(key: string, data: T[]): void => {
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch (error) {
-    console.error(`Error saving ${key} to localStorage:`, error);
-  }
-};
+import { supabase } from './supabaseClient';
 
 // Categories
 export const fetchCategories = async (): Promise<Category[]> => {
   try {
-    const categories = getLocalStorage<Category>('categories');
-    console.log('Fetched categories:', categories);
-    return categories;
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('created_at', { ascending: true });
+    
+    if (error) throw error;
+    
+    console.log('Fetched categories:', data);
+    return data || [];
   } catch (error) {
     console.error('Error fetching categories:', error);
     toast.error('Failed to load categories');
@@ -37,19 +25,21 @@ export const fetchCategories = async (): Promise<Category[]> => {
 
 export const addCategory = async (name: string, imageUrl: string = ''): Promise<Category | null> => {
   try {
-    const categories = getLocalStorage<Category>('categories');
     const newCategory = {
-      id: uuidv4(),
       name,
       image_url: imageUrl,
-      created_at: new Date().toISOString(),
     };
     
-    categories.push(newCategory);
-    setLocalStorage('categories', categories);
+    const { data, error } = await supabase
+      .from('categories')
+      .insert(newCategory)
+      .select()
+      .single();
+    
+    if (error) throw error;
     
     toast.success(`Added category: ${name}`);
-    return newCategory;
+    return data;
   } catch (error) {
     console.error('Error adding category:', error);
     toast.error('Failed to add category');
@@ -60,14 +50,20 @@ export const addCategory = async (name: string, imageUrl: string = ''): Promise<
 export const deleteCategory = async (categoryId: string): Promise<boolean> => {
   try {
     // First delete all items in this category
-    const items = getLocalStorage<GroceryItem>('items');
-    const filteredItems = items.filter(item => item.category_id !== categoryId);
-    setLocalStorage('items', filteredItems);
+    const { error: itemsError } = await supabase
+      .from('items')
+      .delete()
+      .eq('category_id', categoryId);
+    
+    if (itemsError) throw itemsError;
     
     // Then delete the category
-    const categories = getLocalStorage<Category>('categories');
-    const filteredCategories = categories.filter(cat => cat.id !== categoryId);
-    setLocalStorage('categories', filteredCategories);
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', categoryId);
+    
+    if (error) throw error;
     
     toast.success('Category deleted');
     return true;
@@ -81,8 +77,15 @@ export const deleteCategory = async (categoryId: string): Promise<boolean> => {
 // Items
 export const fetchItems = async (categoryId: string): Promise<GroceryItem[]> => {
   try {
-    const items = getLocalStorage<GroceryItem>('items');
-    return items.filter(item => item.category_id === categoryId);
+    const { data, error } = await supabase
+      .from('items')
+      .select('*')
+      .eq('category_id', categoryId)
+      .order('created_at', { ascending: true });
+    
+    if (error) throw error;
+    
+    return data || [];
   } catch (error) {
     console.error('Error fetching items:', error);
     toast.error('Failed to load items');
@@ -92,20 +95,45 @@ export const fetchItems = async (categoryId: string): Promise<GroceryItem[]> => 
 
 export const addItem = async (name: string, categoryId: string): Promise<GroceryItem | null> => {
   try {
-    const items = getLocalStorage<GroceryItem>('items');
+    // Fetch the category to determine if any special logic is needed
+    const { data: category, error: categoryError } = await supabase
+      .from('categories')
+      .select('name')
+      .eq('id', categoryId)
+      .single();
+    
+    if (categoryError) throw categoryError;
+    
     const newItem = {
-      id: uuidv4(),
       name,
       category_id: categoryId,
-      quantity: 1,
-      created_at: new Date().toISOString(),
+      quantity: 1, // Default quantity
     };
     
-    items.push(newItem);
-    setLocalStorage('items', items);
+    // Apply category-specific logic for initial values if needed
+    if (category) {
+      const categoryName = category.name.toLowerCase();
+      
+      if (categoryName === 'fruits' || categoryName === 'veg' || categoryName === 'vegetables') {
+        // For fruits and vegetables, perhaps we count in pounds/kg
+        newItem.quantity = 1;
+      } else if (categoryName === 'poultry') {
+        // For poultry, maybe we count in pounds
+        newItem.quantity = 1;
+      }
+      // Add more category-specific logic as needed
+    }
+    
+    const { data, error } = await supabase
+      .from('items')
+      .insert(newItem)
+      .select()
+      .single();
+    
+    if (error) throw error;
     
     toast.success(`Added item: ${name}`);
-    return newItem;
+    return data;
   } catch (error) {
     console.error('Error adding item:', error);
     toast.error('Failed to add item');
@@ -115,12 +143,13 @@ export const addItem = async (name: string, categoryId: string): Promise<Grocery
 
 export const updateItemQuantity = async (itemId: string, quantity: number): Promise<boolean> => {
   try {
-    const items = getLocalStorage<GroceryItem>('items');
-    const updatedItems = items.map(item => 
-      item.id === itemId ? { ...item, quantity } : item
-    );
+    const { error } = await supabase
+      .from('items')
+      .update({ quantity })
+      .eq('id', itemId);
     
-    setLocalStorage('items', updatedItems);
+    if (error) throw error;
+    
     return true;
   } catch (error) {
     console.error('Error updating item quantity:', error);
@@ -131,9 +160,12 @@ export const updateItemQuantity = async (itemId: string, quantity: number): Prom
 
 export const deleteItem = async (itemId: string): Promise<boolean> => {
   try {
-    const items = getLocalStorage<GroceryItem>('items');
-    const filteredItems = items.filter(item => item.id !== itemId);
-    setLocalStorage('items', filteredItems);
+    const { error } = await supabase
+      .from('items')
+      .delete()
+      .eq('id', itemId);
+    
+    if (error) throw error;
     
     toast.success('Item deleted');
     return true;
@@ -144,14 +176,28 @@ export const deleteItem = async (itemId: string): Promise<boolean> => {
   }
 };
 
-// Upload image - now just returns the image URL or a placeholder
+// Upload image to Supabase storage
 export const uploadImage = async (file: File): Promise<string | null> => {
   try {
-    // Just return a placeholder URL since we can't actually upload
-    return URL.createObjectURL(file);
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${uuidv4()}.${fileExt}`;
+    
+    const { data, error } = await supabase
+      .storage
+      .from('category-images')
+      .upload(filePath, file);
+    
+    if (error) throw error;
+    
+    const { data: urlData } = supabase
+      .storage
+      .from('category-images')
+      .getPublicUrl(filePath);
+    
+    return urlData.publicUrl;
   } catch (error) {
-    console.error('Error handling image:', error);
-    toast.error('Failed to process image');
+    console.error('Error uploading image:', error);
+    toast.error('Failed to upload image');
     return null;
   }
 };
@@ -169,8 +215,14 @@ export const processVoiceCommand = async (command: string): Promise<boolean> => 
       const categoryName = addMatch[2].trim();
       
       // Find category by name
-      const categories = getLocalStorage<Category>('categories');
-      const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
+      const { data: categories, error: categoryError } = await supabase
+        .from('categories')
+        .select('id, name')
+        .ilike('name', categoryName);
+      
+      if (categoryError) throw categoryError;
+      
+      const category = categories && categories[0];
       
       if (category) {
         await addItem(itemName, category.id);
@@ -197,8 +249,14 @@ export const processVoiceCommand = async (command: string): Promise<boolean> => 
       const amount = increaseMatch[2] ? parseInt(increaseMatch[2]) : 1;
       
       // Find item by name
-      const items = getLocalStorage<GroceryItem>('items');
-      const item = items.find(i => i.name.toLowerCase() === itemName.toLowerCase());
+      const { data: items, error: itemError } = await supabase
+        .from('items')
+        .select('*')
+        .ilike('name', itemName);
+      
+      if (itemError) throw itemError;
+      
+      const item = items && items[0];
       
       if (item) {
         const newQuantity = item.quantity + amount;
@@ -217,8 +275,14 @@ export const processVoiceCommand = async (command: string): Promise<boolean> => 
       const amount = decreaseMatch[2] ? parseInt(decreaseMatch[2]) : 1;
       
       // Find item by name
-      const items = getLocalStorage<GroceryItem>('items');
-      const item = items.find(i => i.name.toLowerCase() === itemName.toLowerCase());
+      const { data: items, error: itemError } = await supabase
+        .from('items')
+        .select('*')
+        .ilike('name', itemName);
+      
+      if (itemError) throw itemError;
+      
+      const item = items && items[0];
       
       if (item) {
         const newQuantity = Math.max(0, item.quantity - amount);

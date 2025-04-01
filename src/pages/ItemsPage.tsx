@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { PlusCircle, Minus, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
@@ -52,7 +52,7 @@ const ItemsPage = () => {
     if (categoryId) {
       refreshItems(categoryId);
     }
-  }, [categoryId]);
+  }, [categoryId, refreshItems]);
 
   const handleCreateItem = async () => {
     if (!categoryId) return;
@@ -84,6 +84,21 @@ const ItemsPage = () => {
     const newQuantity = Math.max(0, currentQuantity + change);
     await updateQuantity(itemId, newQuantity);
   };
+  
+  const getCategorySpecificItemLabel = (categoryName?: string) => {
+    if (!categoryName) return "Item";
+    
+    const lowerCaseName = categoryName.toLowerCase();
+    
+    if (lowerCaseName === "fruits") return "Fruit";
+    if (lowerCaseName === "veg" || lowerCaseName === "vegetables") return "Vegetable";
+    if (lowerCaseName === "poultry") return "Meat";
+    if (lowerCaseName === "condiments") return "Condiment";
+    
+    return "Item"; // Default fallback
+  };
+
+  const itemLabel = getCategorySpecificItemLabel(currentCategory?.name);
 
   return (
     <div className="page-container pb-20">
@@ -101,14 +116,14 @@ const ItemsPage = () => {
           onClick={() => setCreateDialogOpen(true)}
         >
           <PlusCircle className="mr-2 h-5 w-5" />
-          Add New Item
+          Add New {itemLabel}
         </Button>
         
         {loadingItems ? (
           <div className="text-center py-8">Loading items...</div>
         ) : categoryItems.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            No items found. Add some items to get started!
+            No {itemLabel.toLowerCase()}s found. Add some {itemLabel.toLowerCase()}s to get started!
           </div>
         ) : (
           <div className="space-y-3">
@@ -163,17 +178,23 @@ const ItemsPage = () => {
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New Item</DialogTitle>
+            <DialogTitle>Add New {itemLabel}</DialogTitle>
+            <DialogDescription>
+              Enter the name of the {itemLabel.toLowerCase()} you want to add to this category.
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Item Name</Label>
+              <Label htmlFor="name">{itemLabel} Name</Label>
               <Input 
                 id="name" 
                 value={newItemName} 
                 onChange={(e) => setNewItemName(e.target.value)}
-                placeholder="e.g., Carrots"
+                placeholder={`e.g., ${currentCategory?.name === "Fruits" ? "Apples" : 
+                  currentCategory?.name === "Veg" ? "Carrots" : 
+                  currentCategory?.name === "Poultry" ? "Chicken" : 
+                  currentCategory?.name === "Condiments" ? "Salt" : "Item Name"}`}
               />
             </div>
           </div>
@@ -189,7 +210,7 @@ const ItemsPage = () => {
               Cancel
             </Button>
             <Button onClick={handleCreateItem}>
-              Add Item
+              Add {itemLabel}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -198,9 +219,9 @@ const ItemsPage = () => {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Item</AlertDialogTitle>
+            <AlertDialogTitle>Delete {itemLabel}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this item. This action cannot be undone.
+              This will permanently delete this {itemLabel.toLowerCase()}. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
