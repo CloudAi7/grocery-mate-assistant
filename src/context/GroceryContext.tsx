@@ -45,100 +45,144 @@ export const GroceryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const refreshCategories = async () => {
     setLoadingCategories(true);
-    const data = await fetchCategories();
-    setCategories(data);
-    setLoadingCategories(false);
+    try {
+      const data = await fetchCategories();
+      setCategories(data);
+    } catch (error) {
+      console.error("Error refreshing categories:", error);
+    } finally {
+      setLoadingCategories(false);
+    }
   };
 
   const refreshItems = async (categoryId: string) => {
     setLoadingItems(true);
-    const data = await fetchItems(categoryId);
-    setItems(prev => ({ ...prev, [categoryId]: data }));
-    setLoadingItems(false);
+    try {
+      const data = await fetchItems(categoryId);
+      setItems(prev => ({ ...prev, [categoryId]: data }));
+    } catch (error) {
+      console.error("Error refreshing items:", error);
+    } finally {
+      setLoadingItems(false);
+    }
   };
 
   const createCategory = async (name: string, imageUrl: string) => {
-    const newCategory = await addCategory(name, imageUrl);
-    if (newCategory) {
-      await refreshCategories();
-      return newCategory;
+    try {
+      const newCategory = await addCategory(name, imageUrl);
+      if (newCategory) {
+        // Update local state
+        setCategories(prev => [...prev, newCategory]);
+        return newCategory;
+      }
+    } catch (error) {
+      console.error("Error in createCategory:", error);
     }
     return null;
   };
 
   const createItem = async (name: string, categoryId: string) => {
-    const newItem = await addItem(name, categoryId);
-    if (newItem) {
-      await refreshItems(categoryId);
-      return newItem;
+    try {
+      const newItem = await addItem(name, categoryId);
+      if (newItem) {
+        // Update local state
+        setItems(prev => ({
+          ...prev,
+          [categoryId]: [...(prev[categoryId] || []), newItem]
+        }));
+        return newItem;
+      }
+    } catch (error) {
+      console.error("Error in createItem:", error);
     }
     return null;
   };
 
   const removeCategory = async (categoryId: string) => {
-    const success = await deleteCategory(categoryId);
-    if (success) {
-      await refreshCategories();
-      // Also remove the items from local state
-      setItems(prev => {
-        const newItems = { ...prev };
-        delete newItems[categoryId];
-        return newItems;
-      });
+    try {
+      const success = await deleteCategory(categoryId);
+      if (success) {
+        // Update local state
+        setCategories(prev => prev.filter(cat => cat.id !== categoryId));
+        // Also remove the items from local state
+        setItems(prev => {
+          const newItems = { ...prev };
+          delete newItems[categoryId];
+          return newItems;
+        });
+      }
+      return success;
+    } catch (error) {
+      console.error("Error in removeCategory:", error);
+      return false;
     }
-    return success;
   };
 
   const removeItem = async (itemId: string) => {
-    const success = await deleteItem(itemId);
-    if (success) {
-      // Update local state by removing the deleted item
-      setItems(prev => {
-        const newItems = { ...prev };
-        
-        // Find which category contains this item
-        for (const categoryId in newItems) {
-          newItems[categoryId] = newItems[categoryId].filter(item => item.id !== itemId);
-        }
-        
-        return newItems;
-      });
+    try {
+      const success = await deleteItem(itemId);
+      if (success) {
+        // Update local state by removing the deleted item
+        setItems(prev => {
+          const newItems = { ...prev };
+          
+          // Find which category contains this item
+          for (const categoryId in newItems) {
+            newItems[categoryId] = newItems[categoryId].filter(item => item.id !== itemId);
+          }
+          
+          return newItems;
+        });
+      }
+      return success;
+    } catch (error) {
+      console.error("Error in removeItem:", error);
+      return false;
     }
-    return success;
   };
 
   const updateQuantity = async (itemId: string, quantity: number) => {
-    const success = await updateItemQuantity(itemId, quantity);
-    if (success) {
-      // Update local state with the new quantity
-      setItems(prev => {
-        const newItems = { ...prev };
-        
-        // Find and update the item in its category
-        for (const categoryId in newItems) {
-          newItems[categoryId] = newItems[categoryId].map(item => 
-            item.id === itemId ? { ...item, quantity } : item
-          );
-        }
-        
-        return newItems;
-      });
+    try {
+      const success = await updateItemQuantity(itemId, quantity);
+      if (success) {
+        // Update local state with the new quantity
+        setItems(prev => {
+          const newItems = { ...prev };
+          
+          // Find and update the item in its category
+          for (const categoryId in newItems) {
+            newItems[categoryId] = newItems[categoryId].map(item => 
+              item.id === itemId ? { ...item, quantity } : item
+            );
+          }
+          
+          return newItems;
+        });
+      }
+      return success;
+    } catch (error) {
+      console.error("Error in updateQuantity:", error);
+      return false;
     }
-    return success;
   };
 
   const handleVoiceCommand = async (command: string) => {
-    const result = await processVoiceCommand(command);
-    
-    // Refresh data after processing the command
-    await refreshCategories();
-    
-    // Also refresh items for each known category
-    for (const category of categories) {
-      await refreshItems(category.id);
+    try {
+      const result = await processVoiceCommand(command);
+      
+      // Refresh data after processing the command
+      await refreshCategories();
+      
+      // Also refresh items for each known category
+      for (const category of categories) {
+        await refreshItems(category.id);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error("Error in handleVoiceCommand:", error);
+      return false;
     }
-    
-    return result;
   };
 
   useEffect(() => {

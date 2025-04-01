@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PlusCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
@@ -59,6 +59,9 @@ const CategoriesPage = () => {
       setNewCategoryName("");
       setUploadedImage(null);
       setCreateDialogOpen(false);
+      
+      // Refresh categories after creating a new one
+      refreshCategories();
     } catch (error) {
       console.error("Error creating category:", error);
       toast({ title: "Error", description: "Failed to create category", variant: "destructive" });
@@ -96,11 +99,22 @@ const CategoriesPage = () => {
         for (const [name, imageUrl] of Object.entries(defaultImages)) {
           await createCategory(name, imageUrl);
         }
+        // Refresh after adding default categories
+        await refreshCategories();
       }
     };
     
     addDefaultCategories();
   }, [categories, loadingCategories]);
+
+  const handleCategoryClick = (categoryId: string) => {
+    try {
+      navigate(`/category/${categoryId}`);
+    } catch (error) {
+      console.error("Navigation error:", error);
+      toast({ title: "Error", description: "Failed to navigate to category", variant: "destructive" });
+    }
+  };
 
   return (
     <div className="page-container">
@@ -117,7 +131,7 @@ const CategoriesPage = () => {
               <div 
                 key={category.id} 
                 className="category-card relative"
-                onClick={() => navigate(`/category/${category.id}`)}
+                onClick={() => handleCategoryClick(category.id)}
               >
                 <div 
                   className="absolute top-2 right-2 z-10 p-1"
@@ -160,6 +174,9 @@ const CategoriesPage = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Category</DialogTitle>
+            <DialogDescription>
+              Enter a name for your new category. Image upload is optional.
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
