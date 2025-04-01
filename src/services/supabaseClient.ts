@@ -21,3 +21,67 @@ export const supabase = createClient<{
     };
   };
 }>(supabaseUrl, supabaseKey);
+
+// Initialize database tables
+export const initializeDatabase = async () => {
+  console.log("Initializing database tables...");
+  
+  // Check if categories table exists
+  const { error: categoriesError } = await supabase
+    .from('categories')
+    .select('count')
+    .limit(1)
+    .single();
+  
+  if (categoriesError && categoriesError.code === '42P01') {
+    console.log("Creating categories table...");
+    // Create categories table
+    const { error } = await supabase.rpc('create_categories_table');
+    if (error) {
+      console.error("Error creating categories table:", error);
+      
+      // If RPC fails, try executing SQL directly
+      await supabase.rpc('execute_sql', {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS categories (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            name TEXT NOT NULL,
+            image_url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `
+      });
+    }
+  }
+  
+  // Check if items table exists
+  const { error: itemsError } = await supabase
+    .from('items')
+    .select('count')
+    .limit(1)
+    .single();
+  
+  if (itemsError && itemsError.code === '42P01') {
+    console.log("Creating items table...");
+    // Create items table
+    const { error } = await supabase.rpc('create_items_table');
+    if (error) {
+      console.error("Error creating items table:", error);
+      
+      // If RPC fails, try executing SQL directly
+      await supabase.rpc('execute_sql', {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS items (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            category_id UUID NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            quantity INTEGER DEFAULT 1,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `
+      });
+    }
+  }
+  
+  console.log("Database initialization completed");
+};
